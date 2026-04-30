@@ -251,9 +251,9 @@ async fn verify_jdc(headers: HeaderMap) -> impl IntoResponse {
     let recomputed_digest = base_hasher.finalize().to_vec();
 
     if sig_bytes == recomputed_digest {
-        println!("  ✅ RFC 9421 HTTP Message Signature successfully verified! Connection secure.");
+        println!("   RFC 9421 HTTP Message Signature successfully verified! Connection secure.");
     } else {
-        println!("  ❌ RFC 9421 Verification Failed! Base String mismatch or signature tampered.");
+        println!("   RFC 9421 Verification Failed! Base String mismatch or signature tampered.");
         return (StatusCode::UNAUTHORIZED, "RFC 9421 Verification Failed").into_response();
     }
 

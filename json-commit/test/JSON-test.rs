@@ -13,6 +13,8 @@ use serde_json::{json, Value};
 ///   "active": true,
 ///   "created_at": "2025-11-05T12:00:00Z"
 /// }
+/// The sample example reprsent below from RFC 9901
+/// Not including any information of authors
 pub fn sample_person_simple_json() -> Value {
     json!({
       "sub": "6c5c0a49-b589-431d-bae7-219122a9ec2c",

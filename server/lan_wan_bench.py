@@ -1,19 +1,19 @@
 #!/usr/bin/env python3
 """
 LAN vs WAN End-to-End Performance Benchmark (Online / Offline Analysis)
-========================================================================
+
 Uses Linux tc + netem on loopback to simulate different network environments
 and drives the real Rust client binary through the full protocol flow.
 
 Protocol phase breakdown:
-  ┌─ ONLINE  (server must be available) ───────────────────────────────────┐
-  │  Phase 1 — Request JSON data from server (one RTT)                     │
-  │  Phase 3 — Submit commitment C + τ; server verifies C'==C and signs C  │
-  └────────────────────────────────────────────────────────────────────────┘
-  ┌─ OFFLINE (no server needed, pure local CPU) ────────────────────────────┐
-  │  Phase 2 — Client samples z, computes τ=z·h, C=τ+Σ H(v_i)·g_i         │
-  │            (can be precomputed without network, independent of latency) │
-  └─────────────────────────────────────────────────────────────────────────┘
+   ONLINE  (server must be available)
+    Phase 1 — Request JSON data from server (one RTT)                     
+    Phase 3 — Submit commitment C + τ; server verifies C'==C and signs C  
+
+   OFFLINE (no server needed, pure local CPU) 
+    Phase 2 — Client samples z, computes τ=z·h, C=τ+Σ H(v_i)·g_i         
+             (can be precomputed without network, independent of latency) 
+  
 
 Test scenarios:
   Baseline  — no extra delay (pure loopback)
@@ -45,7 +45,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-# ── Configuration ────────────────────────────────────────────────────────────
+#  Configuration 
 
 BASE_URL    = "http://127.0.0.1:8443"
 IFACE       = "lo"
@@ -64,7 +64,7 @@ SERVER_CANDIDATES = [
     os.path.join(REPO_ROOT, "target", "debug",   "server"),
 ]
 
-# ── Network Scenarios ────────────────────────────────────────────────────────
+# Network Scenarios
 
 SCENARIOS = [
     {
@@ -111,7 +111,7 @@ SCENARIOS = [
     },
 ]
 
-# ── tc Control ───────────────────────────────────────────────────────────────
+#  tc Control 
 
 def tc_clear():
     """Remove all qdisc rules on loopback (silently ignore errors)."""
@@ -156,8 +156,7 @@ def tc_apply(delay_ms: float, bw_mbit: int, loss_pct: float):
         )
 
 
-# ── Client Execution ─────────────────────────────────────────────────────────
-
+# Client Execution 
 # Regexes to parse key lines from Rust client output
 _RE_PHASE1 = re.compile(r"Phase 1.*?:\s*(\d+)\s*ns")
 _RE_PHASE2 = re.compile(r"Phase 2.*?:\s*(\d+)\s*ns")
@@ -218,7 +217,7 @@ def run_client(client_bin: str, iterations: int, timeout_s: int):
     }
 
 
-# ── Main ─────────────────────────────────────────────────────────────────────
+#  Main
 
 def main():
     parser = argparse.ArgumentParser(description="LAN vs WAN end-to-end performance benchmark")
@@ -318,7 +317,7 @@ def main():
         print("\n✗ Insufficient valid data to generate comparison chart.")
         sys.exit(1)
 
-    # ── Print summary table ────────────────────────────────────────────────────
+    # Print summary table 
     print(f"\n{'═'*80}")
     print(f"{'Scenario':<14} {'Online(ms)':>12} {'Offline(ms)':>12} {'Total(ms)':>12} {'Online%':>9} {'Speedup':>9}")
     print(f"  (Online = Phase1+3, needs server | Offline = Phase2, local CPU only)")
@@ -344,7 +343,7 @@ def main():
         print("  JWS Size (in Header)      : {jws_bytes} bytes".format(**baseline))
         print("  RFC9421 Headers Size      : {rfc_bytes} bytes".format(**baseline))
 
-    # ── Plot ──────────────────────────────────────────────────────────────────
+    # Plot 
     sc_names  = [s["name"]  for s in scenarios if s["name"] in results]
     sc_labels = [s["label"] for s in scenarios if s["name"] in results]
 
@@ -359,7 +358,7 @@ def main():
 
     fig, axes = plt.subplots(1, 2, figsize=(16, 6))
 
-    # ── Left: Online vs Offline stacked bar chart ─────────────────────────────
+    # Left: Online vs Offline stacked bar chart 
     ax = axes[0]
     # Split Online into Phase1 + Phase3 layers for clarity
     bars_p1 = ax.bar(x, p1s, width=0.5,
@@ -392,7 +391,7 @@ def main():
         ax.text(i, tot + tot * 0.015, f"{tot:.1f}ms",
                 ha="center", va="bottom", fontsize=7.5, fontweight="bold")
 
-    # ── Right: Online and Offline trend line chart as network degrades ───────
+    # Right: Online and Offline trend line chart as network degrades 
     ax2 = axes[1]
     ax2.plot(sc_names, onlines,  "o-",  color="#1565C0", label="Online  (Phase1+3, needs server)", linewidth=2.2)
     ax2.plot(sc_names, offlines, "s--", color="#2E7D32", label="Offline (Phase2, local CPU only)",  linewidth=2.2)
@@ -422,7 +421,7 @@ def main():
     out_path = os.path.join(REPO_ROOT, "json-commit", "lan_wan_bench.png")
     plt.savefig(out_path, dpi=150, bbox_inches="tight")
     print(f"\nChart saved: {out_path}")
-    print("Benchmark complete ✅")
+    print("Benchmark complete ")
 
 
 if __name__ == "__main__":

@@ -6,7 +6,7 @@ use rand_core::OsRng;
 use sha2::{Sha256, Digest};
 use crate::errors::JcError;
 
-// 辅助函数：将 JSON 字符串哈希化为曲线上标量 H(v_i)
+/// Hash a string value to a scalar on the curve
 pub fn hash_value_to_scalar(value: &str) -> Scalar {
     let mut hasher = Sha256::new();
     hasher.update(value.as_bytes());
