@@ -81,7 +81,7 @@ async fn user_one(State(state): State<AppState>) -> impl IntoResponse {
     }
     let body = serde_json::Value::Object(map);
 
-    // 将 JSON 存储供 sign-commitment 验证时重建生成元
+    // Store JSON so sign-commitment can rebuild generators during verification
     {
         let mut lock = state.last_json.lock().unwrap();
         *lock = Some(body.clone());
@@ -96,11 +96,11 @@ async fn sign_commitment(
     State(state): State<AppState>,
     headers_in: HeaderMap,
 ) -> impl IntoResponse {
-    // JDC-commit 头: 承诺值 C（compressed RistrettoPoint 的 hex，32 字节）
+    // JDC-commit header: commitment value C (hex of compressed RistrettoPoint, 32 bytes)
     let client_commit_hex = headers_in.get("JDC-commit")
         .and_then(|h| h.to_str().ok())
         .unwrap_or("");
-    // JSON-Commit 头: τ = h^z（compressed RistrettoPoint 的 hex，32 字节）
+    // JSON-Commit header: τ = z·h (hex of compressed RistrettoPoint, 32 bytes)
     let tau_hex = headers_in.get("JSON-Commit")
         .and_then(|h| h.to_str().ok())
         .unwrap_or("");
@@ -112,7 +112,7 @@ async fn sign_commitment(
         return (StatusCode::BAD_REQUEST, HeaderMap::new(), "Missing JSON-Commit (tau) header").into_response();
     }
 
-    // 解压 τ
+    // Decompress τ
     let tau_bytes = match hex::decode(tau_hex) {
         Ok(b) if b.len() == 32 => b,
         _ => return (StatusCode::BAD_REQUEST, HeaderMap::new(), "Invalid tau hex").into_response(),
@@ -124,7 +124,7 @@ async fn sign_commitment(
         None => return (StatusCode::BAD_REQUEST, HeaderMap::new(), "Invalid tau point").into_response(),
     };
 
-    // 加载服务端存储的 JSON
+    // Load the JSON stored on the server side
     let saved_json = {
         let lock = state.last_json.lock().unwrap();
         match lock.clone() {
@@ -133,7 +133,7 @@ async fn sign_commitment(
         }
     };
 
-    // 重建生成元
+    // Rebuild generators
     let ast = Node::from_value(saved_json);
     let (path_hashes, values, _) = path_tree::extract_paths_and_values(&ast, b"init_vector");
     let generators = match GeneratorBuilder::build_from_hashes(&path_hashes) {
@@ -141,7 +141,7 @@ async fn sign_commitment(
         Err(_) => return (StatusCode::INTERNAL_SERVER_ERROR, HeaderMap::new(), "Failed to build generators").into_response(),
     };
 
-    // 计算 C' = τ · ∏(g_i^H(v_i))  （加法记法：C' = τ + Σ H(v_i)·g_i）
+    // Compute C' = τ + Σ H(v_i)·g_i  (additive notation)
     let mut product = RistrettoPoint::default();
     for (g_i, v_i) in generators.iter().zip(values.iter()) {
         let mut hasher = Sha256::new();
@@ -182,41 +182,41 @@ async fn sign_commitment(
     let payload_b64 = URL_SAFE_NO_PAD.encode(jw_payload.to_string().as_bytes());
     let sign_input = format!("{}.{}", header_b64, payload_b64);
 
-    // 使用真实的 ES256K ECDSA 对 JWS 签名
+    // Sign JWS using ES256K ECDSA
     let signature: k256::ecdsa::Signature = state.signing_key.sign(sign_input.as_bytes());
     let sig_b64 = URL_SAFE_NO_PAD.encode(signature.to_bytes());
     let final_jws = format!("{}.{}", sign_input, sig_b64);
 
     let mut headers = HeaderMap::new();
-    // 增加 JSON-Commit 供客户端检查
+    // Echo commitment back for client to check
     headers.insert("JSON-Commit", HeaderValue::from_str(&client_commit_hex).unwrap());
-    // 把完整的 JWS 当作一个无意义的字符串，放入 JDC 头部
+    // Place the full JWS in the JDC header
     headers.insert("JDC", HeaderValue::from_str(&final_jws).unwrap());
     
-    // --- RFC 9421 HTTP Message Signatures 签名过程 ---
-    // 1. 构建 Signature-Input，声明我们要对刚刚放入的 "jdc" 头部进行签名
+    // --- RFC 9421 HTTP Message Signatures ---
+    // 1. Build Signature-Input declaring that we sign the "jdc" header
     let sig_input_val = format!(r#"sig1=("jdc"); alg="es256k"; kid="jdc-Server-key-001""#);
     headers.insert("Signature-Input", HeaderValue::from_str(&sig_input_val).unwrap());
     
-    // 2. 构建规范化的 RFC 9421 签名基底 (Signature Base String)
+    // 2. Build the canonicalized RFC 9421 Signature Base String
     let signature_base = format!(
         "\"jdc\": {}\n\"@signature-params\": {}",
         final_jws,
         r#"("jdc"); alg="es256k"; kid="jdc-Server-key-001""#
     );
     
-    // 3. 使用真实的私钥对 RFC9421 签名基底进行 ECDSA 签名
+    // 3. Sign the RFC 9421 Signature Base String with the private key (ECDSA)
     let rfc_signature: k256::ecdsa::Signature = state.signing_key.sign(signature_base.as_bytes());
     let rfc9421_sig_bytes = rfc_signature.to_bytes();
     
-    // 4. 将真实的签名字节通过 Base64 放入 Signature 头部
+    // 4. Base64-encode the signature bytes and place in the Signature header
     let rfc9421_sig_val = format!("sig1=:{}:", base64::engine::general_purpose::STANDARD.encode(rfc9421_sig_bytes));
     headers.insert("Signature", HeaderValue::from_str(&rfc9421_sig_val).unwrap());
 
     (StatusCode::OK, headers, "ok").into_response()
 }
 
-// 模拟验证方 (Verifier) 端（同属 Server）：接收使用 RFC 9421 发送来的请求，验证 Http 签名，并从中提取内含的 JWS 签名
+// Verifier endpoint (server-side): receives an RFC 9421 signed request, verifies the HTTP signature, and extracts the embedded JWS
 async fn verify_jdc(headers: HeaderMap) -> impl IntoResponse {
     let rfc_signature = headers.get("Signature").and_then(|h| h.to_str().ok()).unwrap_or("");
     let rfc_sig_input = headers.get("Signature-Input").and_then(|h| h.to_str().ok()).unwrap_or("");
@@ -228,7 +228,7 @@ async fn verify_jdc(headers: HeaderMap) -> impl IntoResponse {
 
     println!("\n[Server Verification] 1. Validating RFC 9421 Signature...");
     
-    // a. 提取真正的签名字节 (格式如 sig1=:base64:)
+    // a. Extract raw signature bytes (format: sig1=:base64:)
     let sig_bytes = if rfc_signature.starts_with("sig1=:") && rfc_signature.ends_with(':') {
         let b64 = &rfc_signature[6..rfc_signature.len()-1];
         STANDARD.decode(b64).unwrap_or_default()
@@ -236,15 +236,16 @@ async fn verify_jdc(headers: HeaderMap) -> impl IntoResponse {
         vec![]
     };
 
-    // b. 重新构造签名基底 Base String 以便验签
-    // 这里仅做核心参数示范，即拿到的 jdc 的值，以及 sig_input 里对于该签名的属性描述
-    let expected_sig_params = rfc_sig_input.trim_start_matches("sig1=").trim(); // 如 `("jdc"); alg="...`
+    // b. Reconstruct the Signature Base String for verification
+    // Demonstrates core parameters: the jdc value and the signature attributes from Signature-Input
+    let expected_sig_params = rfc_sig_input.trim_start_matches("sig1=").trim(); // e.g. `("jdc"); alg="...`
     let signature_base = format!(
         "\"jdc\": {}\n\"@signature-params\": {}",
         jdc_header, expected_sig_params
     );
 
-    // c. 真实场景中，你会用对应公钥去验证这段 signature_base。这里由于我们用的 Hash 模型模拟签名，直接重算一次对比即可
+    // c. In production, verify signature_base against the public key.
+    //    Here we use a hash-based simulation: recompute and compare.
     let mut base_hasher = Sha256::new();
     base_hasher.update(signature_base.as_bytes());
     let recomputed_digest = base_hasher.finalize().to_vec();
@@ -259,7 +260,7 @@ async fn verify_jdc(headers: HeaderMap) -> impl IntoResponse {
     println!("\n[Server Verification] 2. Extracting JWS from JDC Header...");
     let jws_str = jdc_header;
 
-    // 3. 从 JWS 结构中拆解并获得真正的 Signature (格式: Header.Payload.Signature)
+    // 3. Split JWS into its three parts (format: Header.Payload.Signature)
     let parts: Vec<&str> = jws_str.split('.').collect();
     if parts.len() != 3 {
         return (StatusCode::BAD_REQUEST, "Invalid JWS format enclosed within JDC").into_response();
