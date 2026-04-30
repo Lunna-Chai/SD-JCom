@@ -38,7 +38,7 @@ impl Node {
         Ok(Node::from_value(v))
     }
 
-    /// Reconstruct serde_json::Value from Node
+    /// Reconstruct serde_json::Value from Node 
     pub fn to_value(&self) -> Value {
         match self {
             Node::Object(fields) => {

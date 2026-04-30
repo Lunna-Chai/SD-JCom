@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>JCommit Protocol Demo</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f7f6; margin: 0; padding: 20px;}
+        .container { max-width: 1000px; margin: 0 auto; display: flex; gap: 20px;}
+        .panel { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); width: 50%; }
+        h2 { color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 10px;}
+        button { background-color: #3498db; color: white; border: none; padding: 10px 15px; margin: 10px 0; border-radius: 5px; cursor: pointer; width: 100%; font-size: 16px;}
+        button:hover { background-color: #2980b9;}
+        button:disabled { background-color: #bdc3c7; cursor: not-allowed; }
+        pre { background: #2c3e50; color: #ecf0f1; padding: 15px; border-radius: 5px; overflow-x: auto; white-space: pre-wrap; font-size: 14px;}
+        .log-entry { margin-bottom: 15px; border-left: 3px solid #e74c3c; padding-left: 10px;}
+        .success { border-left-color: #2ecc71;}
+    </style>
+</head>
+<body>
+    <div style="text-align: center; margin-bottom: 20px;">
+        <h1 style="color:#2c3e50">JSON Credential (JCommit) Protocol Demo</h1>
+        <p>浏览器发起指令 -> Rust 后端接管密码学计算 -> 可视化反馈</p>
+    </div>
+
+    <div class="container">
+        <!-- 左侧：操作面板 -->
+        <div class="panel">
+            <h2>交互流程</h2>
+            <button id="btn1" onclick="runStep(1, '/api/step1_request')">步骤 1: 向服务器请求数据并获取随机数 Z</button>
+            <button id="btn2" onclick="runStep(2, '/api/step2_verify')" disabled>步骤 2: 验证服务器附带的 Z 签名</button>
+            <button id="btn3" onclick="runStep(3, '/api/step3_compute')" disabled>步骤 3: 客户端利用 Z 本地计算承诺</button>
+            <button id="btn4" onclick="runStep(4, '/api/step4_submit')" disabled>步骤 4: 将承诺发还给服务器签发凭证</button>
+        </div>
+
+        <!-- 右侧：数据与日志展示 -->
+        <div class="panel">
+            <h2>实时协议日志</h2>
+            <div id="log-container">
+                <div class="log-entry" style="border-left-color:#3498db">等待发起请求...</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        async function runStep(stepId, apiUrl) {
+            const btn = document.getElementById('btn' + stepId);
+            const container = document.getElementById('log-container');
+            
+            btn.innerHTML = "正在执行中...";
+            btn.disabled = true;
+
+            try {
+                const response = await fetch(apiUrl);
+                const data = await response.json();
+                
+                // 打印格式化的日志
+                const logDiv = document.createElement('div');
+                logDiv.className = data.status === 'success' ? 'log-entry success' : 'log-entry';
+                
+                let logContent = `<strong>执行步骤 ${stepId}:</strong><br/>`;
+                if(stepId === 1 && data.status === 'success') {
+                    // 解码展示美化后的JSON
+                    let prettyJSON = JSON.stringify(JSON.parse(data.json), null, 2);
+                    logContent += `<p>获取到的服务器 Z:</p><pre>${data.z.substring(0,20)}...</pre>`;
+                    logContent += `<p>获取到的数据 (JSON):</p><pre>${prettyJSON}</pre>`;
+                } else if(stepId === 3 && data.status === 'success') {
+                    logContent += `<p>根据 JSON 树及 Z 成功计算的凭证承诺 (Hex):</p><pre>${data.commitment.substring(0,40)}...</pre>`;
+                } else if(stepId === 4 && data.status === 'success') {
+          logContent += `<p>${data.message}</p><p>服务器签名:</p><pre>${data.signature}</pre>`;
+        } else {
+                    logContent += `<p>${data.message || JSON.stringify(data)}</p>`;
+                }
+
+                logDiv.innerHTML = logContent;
+                container.prepend(logDiv); // 新的日志放在上面
+
+                // 解锁下一步
+                if(data.status === 'success' && stepId < 4) {
+                    document.getElementById('btn' + (stepId + 1)).disabled = false;
+                }
+                btn.innerHTML = `步骤 ${stepId} (完成)`;
+                btn.style.backgroundColor = "#2ecc71";
+
+            } catch (err) {
+                console.error(err);
+                btn.innerHTML = `步骤 ${stepId} (网络错误)`;
+                btn.style.backgroundColor = "#e74c3c";
+            }
+        }
+    </script>
+</body>
+</html>

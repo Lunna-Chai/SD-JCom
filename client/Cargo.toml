@@ -3,4 +3,24 @@ name = "client"
 version = "0.1.0"
 edition = "2024"
 
+[[bin]]
+name = "jcommit-client"
+path = "src/jcommit-client.rs"
+
 [dependencies]
+reqwest = { version = "0.11", default-features = false, features = ["blocking", "rustls-tls", "json"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+base64 = "0.21"
+rsa = "0.9"
+sha2 = "0.10"
+json-commit = { path = "../json-commit" }
+p256 = "0.13"
+elliptic-curve = "0.13"
+hex = "0.4"
+axum = "0.7"
+tokio = { version = "1", features = ["full"] }
+tower-http = { version = "0.5", features = ["fs", "cors"] }
+k256 = { version = "0.13.4", features = ["ecdsa"] }
+curve25519-dalek = { version = "4", features = ["rand_core"] }
+rand_core = { version = "0.6", features = ["getrandom"] }

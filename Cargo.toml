@@ -2,5 +2,5 @@
 members = [
     "client",
     "server",
-    "json-commit"
+    "json-commit",
 ]

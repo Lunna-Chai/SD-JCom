@@ -1,8 +1,9 @@
-#[path = "batch-commit.rs"]
-pub mod batch_commit;
+#[path = "commitment.rs"]
+pub mod commitment;
 
 #[path = "generator.rs"]
 pub mod generator;
 
-#[path = "single-commit.rs"]
-pub mod single_commit;
+
+#[path = "path-tree.rs"]
+pub mod path_tree;
